@@ -1,77 +1,88 @@
-# Design Brief – Inventory API (Cloud Computing, Week 12)
+# Design Brief: Inventory API 
 
-Author: `<your name, student ID>` · Date: `<submission date>`
+Author: `Rian Prasetya Munaji | 24/545573/TK/60702` · Tanggal: 26 November 2026
 
 ## 1. Use case
 
-An inventory service for tracking items (for example lab equipment): add an item, look it up, update its quantity or location,
-and remove it. Users are small teams who need a simple shared stock list that is available over HTTP without running a server.
+Layanan inventaris untuk mencatat barang (misalnya peralatan laboratorium): menambah barang, melihat datanya, mengubah jumlah
+stok atau lokasinya, dan menghapusnya. Penggunanya tim kecil yang butuh daftar stok bersama yang bisa diakses lewat HTTP tanpa
+mengelola server.
 
-## 2. Chosen track
+## 2. Track yang dipilih
 
-**Track C – Serverless**, with **Track B elements**. API Gateway (HTTP API) routes requests to one Lambda function written in
-Python 3.12. The function is packaged as a **Docker image** stored in a private **Amazon ECR** repository, and data is stored
-in **DynamoDB**. Two services are planned: `inventory-api` (built in this stage) and `stock-alert` (planned only; it would
-notify when stock falls below the minimum). Serverless was chosen because it keeps the Learner Lab budget nearly untouched:
-there is no instance or database that bills while idle.
+**Track C (Serverless)** dengan **elemen Track B (Docker)**. Satu fungsi Lambda Python 3.12 melayani semua endpoint CRUD dan
+menyimpan data di layanan penyimpanan terkelola. Dua layanan direncanakan: `inventory-api` (dibangun pada tahap ini) dan
+`stock-alert` (hanya rencana: notifikasi saat stok di bawah batas minimum). Serverless dipilih karena tidak ada instance atau
+database yang berbiaya saat tidak dipakai.
 
-## 3. Architecture
+## 3. Arsitektur
 
-See `docs/architecture.png`.
+Diagram: `docs/architecture.png`.
 
-- **Request flow:** client → HTTPS → API Gateway HTTP API → Lambda `inventory-api` → DynamoDB `InventoryItems`.
-- **Build flow:** laptop (`docker build`, `docker push`) → ECR private repository → image used by the Lambda function.
-- **Logs:** Lambda writes to CloudWatch Logs.
-- **IAM:** the Lambda function runs with the Learner Lab **LabRole**, which grants access to DynamoDB and CloudWatch Logs.
-- **Network:** the function runs outside a VPC; clients reach it only through the API Gateway HTTPS endpoint. No NAT Gateway or load balancer is used.
-- **Region:** us-east-1 (one of the two regions allowed in Learner Lab).
+| Peran | Desain awal | Yang dipakai di sandbox | Alasan penggantian |
+| --- | --- | --- | --- |
+| Pintu masuk HTTPS | API Gateway (HTTP API) | Lambda Function URL | `apigateway:POST` ditolak |
+| Komputasi | Lambda (container image) | Lambda (paket zip) | ECR tidak tersedia |
+| Penyimpanan | DynamoDB | Amazon S3 (objek JSON per barang) | `dynamodb:CreateTable` ditolak |
+| Registry image | ECR | Docker image di-build dan diuji di laptop | `ecr:CreateRepository` ditolak |
 
-## 4. Data entity
+Lingkungan: AWS Academy Cloud Foundations Sandbox, region us-east-1. Arsitektur tetap sama: pintu masuk HTTPS → Lambda →
+penyimpanan. Kode mendukung DynamoDB (`TABLE_NAME`) dan S3 (`BUCKET_NAME`), sehingga bisa kembali ke desain awal tanpa
+mengubah logika aplikasi.
 
-`item` – table `InventoryItems`, partition key `item_id` (string, UUID).
+- **Alur permintaan:** klien → HTTPS → Lambda Function URL → Lambda `inventory-api` → S3 `items/<item_id>.json`.
+- **Alur deploy:** laptop (WSL) → zip `app/` → Lambda; Docker image di-build dari `Dockerfile` dan diuji lokal.
+- **Log:** Lambda menulis ke CloudWatch Logs.
+- **IAM:** Lambda berjalan dengan **LabRole** bawaan sandbox, yang memberi akses ke S3 dan CloudWatch Logs.
+- **Jaringan:** Lambda di luar VPC; klien hanya masuk lewat HTTPS Function URL. Tidak ada NAT Gateway atau load balancer.
 
-| Field | Type | Notes |
+## 4. Entitas data
+
+`item`, kunci `item_id` (string, UUID).
+
+| Field | Tipe | Keterangan |
 | --- | --- | --- |
-| item_id | string | generated |
-| name | string | required |
-| category | string | optional |
+| item_id | string | dibuat otomatis |
+| name | string | wajib |
+| category | string | opsional |
 | quantity | integer | >= 0 |
-| location | string | optional |
+| location | string | opsional |
 | min_stock | integer | >= 0 |
 | updated_at | string | ISO 8601 UTC |
 
-## 5. CRUD endpoints
+## 5. Endpoint CRUD
 
-| Operation | Method and path | Success | Errors |
+| Operasi | Metode dan path | Berhasil | Gagal |
 | --- | --- | --- | --- |
 | Create | POST /items | 201 | 400 |
 | Read | GET /items/{item_id} | 200 | 404 |
 | Update | PUT /items/{item_id} | 200 | 400, 404 |
 | Delete | DELETE /items/{item_id} | 200 | 404 |
 
-`GET /items` (list) is an additional endpoint.
+`GET /items` (daftar) adalah endpoint tambahan.
 
-## 6. Security
+## 6. Keamanan
 
-- Execution role: LabRole (no new IAM roles in Learner Lab).
-- HTTPS only through API Gateway; input is validated (required name, non-negative integers, maximum text length).
-- Private ECR repository; credentials are never committed (`.gitignore`).
-- Known limitation: the API has no authentication in this stage. API keys or an authorizer are a later improvement.
+- Peran eksekusi: LabRole (peran IAM baru tidak bisa dibuat di sandbox).
+- Hanya HTTPS; input divalidasi (nama wajib, bilangan bulat tidak negatif, panjang teks dibatasi).
+- Bucket S3 tidak publik; kredensial tidak pernah di-commit (`.gitignore`).
+- Keterbatasan: Function URL memakai auth type `NONE` pada tahap ini. Autentikasi (`AWS_IAM`, atau API key/authorizer bila
+  API Gateway tersedia) adalah pengembangan berikutnya.
 
-## 7. Budget plan
+## 7. Rencana budget
 
-Pay-per-request services only (API Gateway, Lambda, DynamoDB on-demand) plus one small ECR image. Expected cost for the
-tests is a small fraction of a dollar (estimate; verify in the AWS Pricing Calculator). The remaining budget is checked at the
-start and end of every lab session and screenshotted. Avoided on purpose: EC2 left running, RDS, NAT Gateway, load balancer.
+Hanya layanan berbayar per pemakaian (Lambda, Function URL, S3). Sandbox menghapus semua resource di akhir sesi, sehingga
+tidak ada biaya yang tertinggal. Yang sengaja dihindari: EC2 yang menyala terus, RDS, NAT Gateway, load balancer.
 
-## 8. Deployment plan and evidence
+## 8. Deployment dan bukti
 
-Steps and commands are in `docs/deployment-plan.md`: DynamoDB table → ECR repository → build and push image → Lambda from image
-→ HTTP API with routes → `scripts/smoke-test.sh`. Evidence kept in `evidence/`: screenshots of the table, ECR image, Lambda
-configuration (Image, LabRole), API Gateway routes, and the smoke-test output with HTTP status codes.
+Langkah dan perintah yang dijalankan ada di `docs/deployment-plan.md`. Hasil uji `scripts/smoke-test.sh` terhadap Function URL:
+201, 200, 200, 200, 200, 404, 400 (sesuai harapan). Bukti di `evidence/`: penolakan layanan, bucket S3, konfigurasi Lambda
+(LabRole), Function URL, output smoke test, dan uji Docker lokal.
 
-## 9. Risks
+## 9. Risiko dan keterbatasan
 
-- API Gateway may not be available in a given Learner Lab; fallback is a Lambda Function URL.
-- Docker image format issues on ARM laptops; mitigated by building for `linux/amd64`.
-- Learner Lab sessions last at most 4 hours and the CLI credentials change each session.
+- Sandbox membatasi layanan; tiga layanan desain awal diganti seperti tabel di bagian 3.
+- Sandbox menghapus resource di akhir sesi, sehingga URL API tidak aktif setelah sesi berakhir; screenshot menjadi bukti.
+- S3 tidak mendukung query seperti DynamoDB; `GET /items` membaca semua objek, cukup untuk skala kecil tetapi perlu DynamoDB
+  untuk data besar.
