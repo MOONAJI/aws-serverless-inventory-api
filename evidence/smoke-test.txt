@@ -1,0 +1,27 @@
+
+### POST /items (create)
+{"item_id": "b15b46b8-e6cf-477b-b073-0e7c727409bd", "name": "Oscilloscope", "category": "Lab equipment", "quantity": 3, "location": "Lab 2", "min_stock": 1, "updated_at": "2026-11-26T13:18:41+00:00"}
+HTTP 201
+
+### GET /items/b15b46b8-e6cf-477b-b073-0e7c727409bd (read)
+{"item_id": "b15b46b8-e6cf-477b-b073-0e7c727409bd", "name": "Oscilloscope", "category": "Lab equipment", "quantity": 3, "location": "Lab 2", "min_stock": 1, "updated_at": "2026-11-26T13:18:41+00:00"}
+HTTP 200
+
+### PUT /items/b15b46b8-e6cf-477b-b073-0e7c727409bd (update quantity to 2)
+{"item_id": "b15b46b8-e6cf-477b-b073-0e7c727409bd", "name": "Oscilloscope", "category": "Lab equipment", "quantity": 2, "location": "Lab 2", "min_stock": 1, "updated_at": "2026-11-26T13:18:43+00:00"}
+HTTP 200
+
+### GET /items (list, bonus)
+{"items": [{"item_id": "057f3ef9-3335-43b1-be96-c009f6fcd1d9", "name": "Oscilloscope", "category": "Lab equipment", "quantity": 3, "location": "Lab 2", "min_stock": 1, "updated_at": "2026-11-26T13:15:33+00:00"}, {"item_id": "b15b46b8-e6cf-477b-b073-0e7c727409bd", "name": "Oscilloscope", "category": "Lab equipment", "quantity": 2, "location": "Lab 2", "min_stock": 1, "updated_at": "2026-11-26T13:18:43+00:00"}], "count": 2}
+HTTP 200
+
+### DELETE /items/b15b46b8-e6cf-477b-b073-0e7c727409bd (delete)
+{"deleted": "b15b46b8-e6cf-477b-b073-0e7c727409bd"}
+HTTP 200
+
+### GET /items/b15b46b8-e6cf-477b-b073-0e7c727409bd after delete (expect 404)
+HTTP 404
+
+### POST /items without name (expect 400)
+{"error": "validation failed", "details": ["name is required"]}
+HTTP 400
