@@ -1,0 +1,7 @@
+{
+  "version": "2.0",
+  "rawPath": "/items",
+  "requestContext": { "http": { "method": "POST", "path": "/items" } },
+  "isBase64Encoded": false,
+  "body": "{\"name\": \"Oscilloscope\", \"category\": \"Lab equipment\", \"quantity\": 3, \"location\": \"Lab 2\", \"min_stock\": 1}"
+}
