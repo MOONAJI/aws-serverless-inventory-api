@@ -1,8 +1,9 @@
-"""DynamoDB access for the inventory API.
+"""Storage access for the inventory API (DynamoDB, with an S3 fallback).
 
 boto3 is imported lazily so the module (and the unit tests) work without it;
 inside Lambda it is provided by the base image.
 """
+import json
 
 
 class ItemNotFoundError(Exception):
@@ -88,3 +89,89 @@ class DynamoRepository:
             if _is_conditional_failure(exc):
                 raise ItemNotFoundError(item_id) from exc
             raise
+
+
+_S3_MISSING = {"404", "NoSuchKey", "NotFound"}
+
+
+def _is_s3_missing(exc):
+    error = getattr(exc, "response", {}).get("Error", {})
+    return str(error.get("Code")) in _S3_MISSING
+
+
+class S3Repository:
+    """Same interface as DynamoRepository, storing each item as a JSON object.
+
+    Fallback store for sandboxes that do not allow DynamoDB:
+    object key = items/<item_id>.json
+    """
+
+    _PREFIX = "items/"
+
+    def __init__(self, bucket_name, client=None):
+        if client is None:
+            import boto3  # provided by the Lambda base image
+
+            client = boto3.client("s3")
+        self._s3 = client
+        self._bucket = bucket_name
+
+    def _key(self, item_id):
+        return "%s%s.json" % (self._PREFIX, item_id)
+
+    def _put(self, item):
+        self._s3.put_object(
+            Bucket=self._bucket,
+            Key=self._key(item["item_id"]),
+            Body=json.dumps(item).encode("utf-8"),
+            ContentType="application/json",
+        )
+
+    def _exists(self, item_id):
+        try:
+            self._s3.head_object(Bucket=self._bucket, Key=self._key(item_id))
+            return True
+        except Exception as exc:
+            if _is_s3_missing(exc):
+                return False
+            raise
+
+    def create(self, item):
+        if self._exists(item["item_id"]):
+            raise ItemExistsError(item["item_id"])
+        self._put(item)
+        return item
+
+    def get(self, item_id):
+        try:
+            response = self._s3.get_object(Bucket=self._bucket, Key=self._key(item_id))
+        except Exception as exc:
+            if _is_s3_missing(exc):
+                return None
+            raise
+        return json.loads(response["Body"].read())
+
+    def list(self):
+        items = []
+        kwargs = {"Bucket": self._bucket, "Prefix": self._PREFIX}
+        while True:
+            response = self._s3.list_objects_v2(**kwargs)
+            for entry in response.get("Contents", []):
+                body = self._s3.get_object(Bucket=self._bucket, Key=entry["Key"])["Body"]
+                items.append(json.loads(body.read()))
+            if not response.get("IsTruncated"):
+                return items
+            kwargs["ContinuationToken"] = response["NextContinuationToken"]
+
+    def update(self, item_id, fields):
+        item = self.get(item_id)
+        if item is None:
+            raise ItemNotFoundError(item_id)
+        item.update(fields)
+        self._put(item)
+        return item
+
+    def delete(self, item_id):
+        if not self._exists(item_id):
+            raise ItemNotFoundError(item_id)
+        self._s3.delete_object(Bucket=self._bucket, Key=self._key(item_id))

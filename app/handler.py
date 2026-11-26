@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import uuid4
 
-from app.repository import DynamoRepository, ItemExistsError, ItemNotFoundError
+from app.repository import DynamoRepository, ItemExistsError, ItemNotFoundError, S3Repository
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -39,7 +39,14 @@ class ValidationError(Exception):
 def _get_repository():
     global _repository
     if _repository is None:
-        _repository = DynamoRepository(os.environ["TABLE_NAME"])
+        # DynamoDB is the designed store; S3 is the fallback used when the
+        # sandbox does not allow creating DynamoDB tables.
+        if os.environ.get("TABLE_NAME"):
+            _repository = DynamoRepository(os.environ["TABLE_NAME"])
+        elif os.environ.get("BUCKET_NAME"):
+            _repository = S3Repository(os.environ["BUCKET_NAME"])
+        else:
+            raise RuntimeError("set TABLE_NAME (DynamoDB) or BUCKET_NAME (S3)")
     return _repository
 
 
