@@ -17,7 +17,7 @@ database yang berbiaya saat tidak dipakai.
 
 ## 3. Arsitektur
 
-Diagram: `docs/architecture.png`.
+Diagram: `docs/architecture.png` (arsitektur rancangan). Di sandbox, layanan yang tidak diizinkan diganti sesuai tabel berikut, dengan arsitektur yang sama.
 
 | Peran | Desain awal | Yang dipakai di sandbox | Alasan penggantian |
 | --- | --- | --- | --- |

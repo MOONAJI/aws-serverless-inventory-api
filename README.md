@@ -5,6 +5,8 @@ Author: `Rian Prasetya Munaji | 24/545573/TK/60702`
 
 ![Diagram arsitektur](docs/architecture.png)
 
+*Diagram di atas adalah arsitektur rancangan (API Gateway, Lambda container image dari ECR, DynamoDB). Di AWS Academy Cloud Foundations Sandbox, ketiga layanan itu tidak diizinkan sehingga diganti dengan alternatif yang memakai arsitektur yang sama; lihat bagian "Desain awal dan layanan pengganti".*
+
 ## Apa yang dibangun
 
 Proyek ini adalah **layanan pencatat stok barang (inventaris) yang berjalan di AWS dan bisa diakses lewat internet**.
